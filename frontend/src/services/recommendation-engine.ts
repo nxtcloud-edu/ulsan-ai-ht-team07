@@ -332,14 +332,35 @@ function determineCourseSlots(
   }
 
   // 시간에 맞게 슬롯 수 조정 (장소당 최소 30분 + 이동시간 15분)
-  const maxSlots = Math.floor(availableMinutes / 45);
-  return slots.slice(0, Math.min(slots.length, maxSlots, 6));
+  const maxSlots = Math.min(Math.floor(availableMinutes / 45), 6);
+  const capped = slots.slice(0, maxSlots);
+  // 시간이 많이 남는데 슬롯이 적으면(예: 활동 1개만 골랐거나 짧은 패턴) 빈 시간을 그냥 버리지 말고 채운다
+  return fillSlotsToTimeBudget(capped, maxSlots);
+}
+
+/** 시간이 남는데 슬롯이 부족하면 무난한 카테고리로 채워서 설정한 종료 시간을 최대한 활용한다 */
+const FILLER_CATEGORIES: PlaceCategory[] = [
+  'cafe', 'walk', 'photo_studio', 'shopping', 'exhibition', 'accessories_shop', 'bar', 'park',
+];
+
+function fillSlotsToTimeBudget(slots: PlaceCategory[], maxSlots: number): PlaceCategory[] {
+  const result = [...slots];
+  const used = new Set(result);
+  let guard = 0;
+  while (result.length < maxSlots && guard < 20) {
+    const unused = FILLER_CATEGORIES.find((c) => !used.has(c));
+    const next = unused || FILLER_CATEGORIES[guard % FILLER_CATEGORIES.length];
+    result.push(next);
+    used.add(next);
+    guard++;
+  }
+  return result;
 }
 
 /** 코스 흐름 패턴 선택 */
 function selectFlowPattern(prefs: UserPreferences, availableMinutes: number): PlaceCategory[] {
-  // 시간이 짧으면 2-3곳, 길면 4-5곳
-  const targetCount = availableMinutes <= 120 ? 2 : availableMinutes <= 240 ? 3 : 4;
+  // 시간이 짧으면 2-3곳, 길면 최대 6곳까지
+  const targetCount = availableMinutes <= 120 ? 2 : availableMinutes <= 240 ? 3 : availableMinutes <= 360 ? 4 : availableMinutes <= 480 ? 5 : 6;
 
   // 동행자에 따른 패턴 선호
   let patterns = COURSE_FLOW_PATTERNS;
@@ -906,13 +927,15 @@ function pickThemedSlotSets(
   }
 
   const shuffled = [...patterns].sort(() => Math.random() - 0.5);
-  const maxSlots = Math.floor(availableMinutes / 45);
+  const maxSlots = Math.min(Math.floor(availableMinutes / 45), 6);
 
   return Array.from({ length: count }, (_, i) => {
     const pattern = shuffled[i % shuffled.length];
+    const capped = pattern.categories.slice(0, maxSlots);
     return {
       name: pattern.name,
-      slots: pattern.categories.slice(0, Math.min(pattern.categories.length, maxSlots, 6)),
+      // 테마 패턴이 짧아서 시간이 남으면 무난한 카테고리로 채운다
+      slots: fillSlotsToTimeBudget(capped, maxSlots),
     };
   });
 }
