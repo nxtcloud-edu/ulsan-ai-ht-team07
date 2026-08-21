@@ -27,6 +27,43 @@ export function getCurrentDayOfWeek(): number {
   return new Date().getDay();
 }
 
+/** 오늘 날짜를 "YYYY-MM-DD" 형식으로 반환 */
+export function getTodayDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = (now.getMonth() + 1).toString().padStart(2, '0');
+  const d = now.getDate().toString().padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** "YYYY-MM-DD" 문자열의 요일 반환 (0=일, ..., 6=토) */
+export function getDayOfWeekFromDate(date: string): number {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(y, m - 1, d).getDay();
+}
+
+/** "YYYY-MM-DD"를 "8월 25일 (화)"처럼 사람이 읽기 좋은 형태로 변환 */
+export function formatDateLabel(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayOfWeek = new Date(y, m - 1, d).getDay();
+  const today = getTodayDate();
+  const tomorrow = addDaysToDate(today, 1);
+  if (date === today) return `오늘 (${m}월 ${d}일)`;
+  if (date === tomorrow) return `내일 (${m}월 ${d}일)`;
+  return `${m}월 ${d}일 (${dayNames[dayOfWeek]})`;
+}
+
+/** "YYYY-MM-DD"에 일수를 더한 날짜 반환 */
+export function addDaysToDate(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const next = new Date(y, m - 1, d + days);
+  const ny = next.getFullYear();
+  const nm = (next.getMonth() + 1).toString().padStart(2, '0');
+  const nd = next.getDate().toString().padStart(2, '0');
+  return `${ny}-${nm}-${nd}`;
+}
+
 /** 요일 숫자를 영문 키로 변환 */
 export function dayToKey(day: number): string {
   const keys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];

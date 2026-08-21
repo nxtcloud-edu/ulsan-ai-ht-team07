@@ -7,6 +7,7 @@ import {
   RecommendationError,
 } from '../types';
 import { enrichCourseWithExternalData } from '../services/external-data-service';
+import { getTodayDate } from '../utils/time';
 
 // ===== 기본값 =====
 
@@ -15,6 +16,7 @@ const defaultPreferences: UserPreferences = {
   location: '울산 남구 무거동',
   locationCoords: { latitude: 35.5425, longitude: 129.2564 },
   groupSize: 2,
+  date: getTodayDate(),
   startTime: 'now',
   endTime: undefined,
   budgetPerPerson: 30000,

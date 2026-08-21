@@ -4,7 +4,7 @@
  */
 
 import { UserPreferences, QuickPreset } from '../types';
-import { getCurrentTime } from '../utils/time';
+import { getCurrentTime, getTodayDate } from '../utils/time';
 
 /** 빠른 추천 프리셋 정보 */
 export interface QuickPresetInfo {
@@ -33,6 +33,7 @@ export function getPresetPreferences(preset: QuickPreset): UserPreferences {
     location: '울산 남구 무거동',
     locationCoords: { latitude: 35.5425, longitude: 129.2564 },
     groupSize: 2,
+    date: getTodayDate(),
     startTime: now,
     endTime: undefined,
     budgetPerPerson: 30000,

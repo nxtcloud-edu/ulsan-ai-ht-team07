@@ -7,7 +7,6 @@ import BudgetSelector from './BudgetSelector';
 import ActivityTags from './ActivityTags';
 import FoodPreferenceSelector from './FoodPreferenceSelector';
 import AvoidanceTags from './AvoidanceTags';
-import QuickRecommendation from './QuickRecommendation';
 
 export default function HomeView() {
   const { state, updatePreferences, setCourseOptions, setLoading, setError, setView } = useApp();
@@ -55,9 +54,6 @@ export default function HomeView() {
           <span className="text-[11px] text-gray-500">아래에서 조건 설정</span>
         </div>
       </section>
-
-      {/* 빠른 추천 */}
-      <QuickRecommendation />
 
       {/* 구분선 */}
       <div className="flex items-center gap-3">

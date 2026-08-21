@@ -4,6 +4,7 @@ import { formatCost } from '../utils/cost';
 import { formatTravelTime } from '../utils/distance';
 import { categoryLabels } from './PlaceCard';
 import CourseMapView from './CourseMapView';
+import { formatDateLabel } from '../utils/time';
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -93,6 +94,11 @@ export default function CourseOptionsView() {
       </button>
 
       <section className="text-center space-y-1">
+        {courseOptions[0]?.preferences.date && (
+          <span className="inline-block px-3 py-1 mb-1 text-xs font-semibold text-primary-700 bg-primary-50 rounded-full">
+            📅 {formatDateLabel(courseOptions[0].preferences.date)}
+          </span>
+        )}
         <h2 className="text-xl font-bold text-navy">코스 {courseOptions.length}개를 준비했어요!</h2>
         <p className="text-sm text-gray-500">마음에 드는 코스를 골라주세요</p>
       </section>

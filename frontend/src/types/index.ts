@@ -164,6 +164,7 @@ export interface UserPreferences {
   location: string; // 검색으로 선택한 지역명 (자유 텍스트, 전국 지원)
   locationCoords?: { latitude: number; longitude: number }; // 선택한 지역의 좌표
   groupSize: number;
+  date: string; // "YYYY-MM-DD" — 언제 놀러 갈지 (오늘/오늘 이후)
   startTime: string; // "HH:mm" 또는 "now"
   endTime?: string; // 미설정시 startTime + 3시간
   budgetPerPerson: number | null; // null = 상관없음

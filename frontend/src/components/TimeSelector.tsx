@@ -1,9 +1,16 @@
 import { useApp } from '../context/AppContext';
-import { getCurrentTime } from '../utils/time';
+import { getCurrentTime, getTodayDate, addDaysToDate, formatDateLabel } from '../utils/time';
+
+const dateQuickOptions = [
+  { offset: 0, label: '오늘' },
+  { offset: 1, label: '내일' },
+  { offset: 2, label: '모레' },
+];
 
 export default function TimeSelector() {
   const { state, updatePreferences } = useApp();
-  const { startTime, endTime, groupSize } = state.preferences;
+  const { date, startTime, endTime, groupSize } = state.preferences;
+  const today = getTodayDate();
 
   const handleStartTimeChange = (value: string) => {
     if (value === 'now') {
@@ -13,11 +20,55 @@ export default function TimeSelector() {
     }
   };
 
+  const handleDateChange = (value: string) => {
+    // 오늘이 아닌 날짜인데 시작 시간이 "지금"이면 의미가 없으니 현재 시각으로 고정해준다
+    if (value !== today && startTime === 'now') {
+      updatePreferences({ date: value, startTime: getCurrentTime() });
+    } else {
+      updatePreferences({ date: value });
+    }
+  };
+
   return (
     <section aria-labelledby="time-label" className="space-y-3">
       <h2 id="time-label" className="text-lg font-semibold text-navy">
         언제, 몇 명이요?
       </h2>
+
+      {/* 날짜 */}
+      <div className="space-y-1.5">
+        <label className="text-sm text-gray-600 font-medium">날짜</label>
+        <div className="flex flex-wrap gap-2">
+          {dateQuickOptions.map(({ offset, label }) => {
+            const value = addDaysToDate(today, offset);
+            const isSelected = date === value;
+            return (
+              <button
+                key={offset}
+                onClick={() => handleDateChange(value)}
+                className={`px-3.5 py-2 rounded-xl border-2 text-sm font-medium transition-all
+                  ${isSelected
+                    ? 'border-primary-400 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 bg-white hover:border-primary-200'
+                  }
+                  focus:outline-none focus:ring-2 focus:ring-primary-300`}
+              >
+                {label}
+              </button>
+            );
+          })}
+          <input
+            type="date"
+            value={date}
+            min={today}
+            onChange={(e) => e.target.value && handleDateChange(e.target.value)}
+            className="flex-1 min-w-[9rem] px-3 py-2 border-2 border-gray-200 rounded-xl text-sm
+              focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-200"
+            aria-label="직접 날짜 선택"
+          />
+        </div>
+        <p className="text-xs text-gray-400">{formatDateLabel(date)}</p>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* 인원 */}
@@ -64,12 +115,14 @@ export default function TimeSelector() {
           <div className="flex gap-2">
             <button
               onClick={() => handleStartTimeChange('now')}
+              disabled={date !== today}
               className={`px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all
                 ${startTime === 'now'
                   ? 'border-primary-400 bg-primary-50 text-primary-700'
                   : 'border-gray-200 bg-white hover:border-primary-200'
                 }
-                focus:outline-none focus:ring-2 focus:ring-primary-300`}
+                focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:opacity-40 disabled:cursor-not-allowed`}
+              title={date !== today ? '오늘 날짜에서만 사용할 수 있어요' : undefined}
             >
               지금
             </button>

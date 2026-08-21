@@ -1,6 +1,7 @@
 import { Course } from '../types';
 import PlaceCard from './PlaceCard';
 import CourseSummary from './CourseSummary';
+import { formatDateLabel } from '../utils/time';
 
 interface CourseTimelineProps {
   course: Course;
@@ -11,7 +12,12 @@ export default function CourseTimeline({ course }: CourseTimelineProps) {
     <div className="space-y-4">
       {/* 제목 */}
       <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold text-navy">오늘은 이렇게 놀아보세요!</h2>
+        {course.preferences.date && (
+          <span className="inline-block px-3 py-1 mb-1 text-xs font-semibold text-primary-700 bg-primary-50 rounded-full">
+            📅 {formatDateLabel(course.preferences.date)}
+          </span>
+        )}
+        <h2 className="text-xl font-bold text-navy">이렇게 놀아보세요!</h2>
         <p className="text-sm text-gray-500">
           {course.stops.length}곳을 돌아보는 코스예요
         </p>
