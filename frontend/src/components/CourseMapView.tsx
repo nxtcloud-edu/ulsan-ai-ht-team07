@@ -21,7 +21,11 @@ export default function CourseMapView({ course, height = '20rem' }: CourseMapVie
 
         const { kakao } = window;
         const stops = course.stops;
-        const positions = stops.map((s) => new kakao.maps.LatLng(s.place.latitude, s.place.longitude));
+        const startCoords = course.preferences.startCoords;
+        const stopPositions = stops.map((s) => new kakao.maps.LatLng(s.place.latitude, s.place.longitude));
+        const startPosition = startCoords ? new kakao.maps.LatLng(startCoords.latitude, startCoords.longitude) : null;
+        // 출발지가 있으면 경로/범위 계산에 같이 포함시킨다
+        const positions = startPosition ? [startPosition, ...stopPositions] : stopPositions;
 
         const map = new kakao.maps.Map(containerRef.current, {
           center: positions[0],
@@ -38,11 +42,34 @@ export default function CourseMapView({ course, height = '20rem' }: CourseMapVie
           strokeStyle: 'solid',
         });
 
+        // 출발지 마커 (있으면)
+        if (startPosition) {
+          const startOverlay = new kakao.maps.CustomOverlay({
+            map,
+            position: startPosition,
+            yAnchor: 1,
+            content: `
+              <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                <div style="background:#22c55e;color:#fff;border-radius:9999px;width:26px;height:26px;
+                  display:flex;align-items:center;justify-content:center;font-size:14px;
+                  border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.25);">
+                  🚩
+                </div>
+                <div style="background:#fff;padding:2px 6px;border-radius:6px;font-size:11px;
+                  font-weight:600;color:#166534;box-shadow:0 1px 3px rgba(0,0,0,0.2);white-space:nowrap;">
+                  ${course.preferences.startPlaceName || '출발지'}
+                </div>
+              </div>
+            `,
+          });
+          void startOverlay;
+        }
+
         // 순번이 매겨진 마커
         stops.forEach((stop, i) => {
           const overlay = new kakao.maps.CustomOverlay({
             map,
-            position: positions[i],
+            position: stopPositions[i],
             yAnchor: 1,
             content: `
               <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">

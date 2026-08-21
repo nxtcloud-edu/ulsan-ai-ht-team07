@@ -32,7 +32,13 @@ export default function CourseTimeline({ course }: CourseTimelineProps) {
               className="absolute left-4 top-6 w-5 h-5 bg-primary-500 rounded-full border-4 border-primary-100 z-10"
               aria-hidden="true"
             />
-            <PlaceCard stop={stop} isFirst={index === 0} />
+            <PlaceCard
+              stop={stop}
+              isFirst={index === 0}
+              startPlaceName={course.preferences.startPlaceName}
+              startCoords={course.preferences.startCoords}
+              transport={course.preferences.transport}
+            />
           </div>
         ))}
 

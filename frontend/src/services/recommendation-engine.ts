@@ -425,6 +425,15 @@ function buildCourse(
         place.longitude
       );
       travelTime = estimateTravelTime(distance, prefs.transport);
+    } else if (prefs.startCoords) {
+      // 첫 장소: 출발지로부터의 이동시간
+      distance = calculateDistance(
+        prefs.startCoords.latitude,
+        prefs.startCoords.longitude,
+        place.latitude,
+        place.longitude
+      );
+      travelTime = estimateTravelTime(distance, prefs.transport);
     }
 
     // 이동 시간 반영

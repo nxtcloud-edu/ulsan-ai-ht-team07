@@ -1,4 +1,4 @@
-import { CourseStop, NaverBlogReview } from '../types';
+import { CourseStop, NaverBlogReview, TransportType } from '../types';
 import { formatCost } from '../utils/cost';
 import { formatDistance, formatTravelTime } from '../utils/distance';
 import { getMapService } from '../services/map-service';
@@ -9,7 +9,18 @@ import { getBestInstagramUrl, generateInstagramKeywords } from '../services/inst
 interface PlaceCardProps {
   stop: CourseStop;
   isFirst: boolean;
+  /** 첫 장소일 때만 사용: 출발지 정보 (있으면 "출발지 → 첫 장소" 구간을 보여줌) */
+  startPlaceName?: string;
+  startCoords?: { latitude: number; longitude: number };
+  transport: TransportType;
 }
+
+const transportIcons: Record<TransportType, string> = {
+  walk: '🚶',
+  public: '🚌',
+  car: '🚗',
+  any: '🚶',
+};
 
 export const categoryLabels: Record<string, string> = {
   restaurant: '식사',
@@ -133,20 +144,49 @@ function ExternalLinks({ placeName, neighborhood, region, category, externalData
   );
 }
 
-export default function PlaceCard({ stop, isFirst }: PlaceCardProps) {
+export default function PlaceCard({ stop, isFirst, startPlaceName, startCoords, transport }: PlaceCardProps) {
   const mapService = getMapService();
   const externalData = stop.place.externalData;
   const blogReviews = externalData?.naverBlogReviews || [];
+  const transportIcon = transportIcons[transport] || '🚶';
+
+  // 출발지 → 첫 장소 구간의 실제 경로(대중교통 몇 번 타야 하는지, 차로 얼마나 걸리는지)는
+  // 카카오 API로는 알 수 없어서, 카카오맵 길찾기로 바로 연결한다.
+  const startDirectionsUrl = isFirst && startCoords
+    ? mapService.getDirectionsUrl(
+        { name: startPlaceName || '출발지', latitude: startCoords.latitude, longitude: startCoords.longitude },
+        stop.place
+      )
+    : null;
 
   return (
     <article className="card space-y-3" aria-label={`${stop.place.name} - ${stop.startTime}`}>
       {/* 이동 정보 */}
       {!isFirst && stop.travelTimeFromPrev > 0 && (
         <div className="flex items-center gap-2 text-xs text-gray-400 -mt-1 pb-1 border-b border-dashed border-gray-100">
-          <span>🚶</span>
+          <span>{transportIcon}</span>
           <span>{formatDistance(stop.distanceFromPrev)}</span>
           <span>·</span>
           <span>{formatTravelTime(stop.travelTimeFromPrev)}</span>
+        </div>
+      )}
+      {isFirst && stop.travelTimeFromPrev > 0 && (
+        <div className="flex items-center gap-2 text-xs text-gray-400 -mt-1 pb-1 border-b border-dashed border-gray-100">
+          <span>{transportIcon}</span>
+          <span>{startPlaceName || '출발지'}에서</span>
+          <span>{formatDistance(stop.distanceFromPrev)}</span>
+          <span>·</span>
+          <span>{formatTravelTime(stop.travelTimeFromPrev)}</span>
+          {startDirectionsUrl && (
+            <a
+              href={startDirectionsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto text-primary-600 hover:underline whitespace-nowrap"
+            >
+              🗺️ 실제 경로·버스 확인
+            </a>
+          )}
         </div>
       )}
 

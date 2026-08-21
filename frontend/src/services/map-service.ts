@@ -9,6 +9,12 @@ import { Place } from '../types';
 
 // ===== 지도 서비스 인터페이스 =====
 
+export interface MapPoint {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface MapService {
   /** 지도 사용 가능 여부 */
   isAvailable(): boolean;
@@ -16,8 +22,8 @@ export interface MapService {
   /** 장소를 지도에서 열기 */
   openInMap(place: Place): void;
 
-  /** 길찾기 링크 생성 */
-  getDirectionsUrl(from: Place | null, to: Place): string;
+  /** 길찾기 링크 생성 (출발지가 있으면 실제 경로/대중교통 안내가 뜨는 카카오맵 링크) */
+  getDirectionsUrl(from: MapPoint | null, to: Place): string;
 
   /** 장소 검색 (API 연결 시) */
   searchPlaces?(query: string, lat: number, lng: number): Promise<Place[]>;
@@ -35,9 +41,10 @@ class KakaoMapExternalService implements MapService {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  getDirectionsUrl(from: Place | null, to: Place): string {
+  getDirectionsUrl(from: MapPoint | null, to: Place): string {
     if (from) {
-      return `https://map.kakao.com/link/to/${encodeURIComponent(to.name)},${to.latitude},${to.longitude}`;
+      // 출발지가 있으면 실제 경로(대중교통/자동차/도보 옵션 전환 가능)가 나오는 길찾기 링크
+      return `https://map.kakao.com/link/from/${encodeURIComponent(from.name)},${from.latitude},${from.longitude}/to/${encodeURIComponent(to.name)},${to.latitude},${to.longitude}`;
     }
     return `https://map.kakao.com/link/map/${encodeURIComponent(to.name)},${to.latitude},${to.longitude}`;
   }
@@ -65,9 +72,10 @@ class KakaoMapAPIService implements MapService {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  getDirectionsUrl(from: Place | null, to: Place): string {
+  getDirectionsUrl(from: MapPoint | null, to: Place): string {
     if (from) {
-      return `https://map.kakao.com/link/to/${encodeURIComponent(to.name)},${to.latitude},${to.longitude}`;
+      // 출발지가 있으면 실제 경로(대중교통/자동차/도보 옵션 전환 가능)가 나오는 길찾기 링크
+      return `https://map.kakao.com/link/from/${encodeURIComponent(from.name)},${from.latitude},${from.longitude}/to/${encodeURIComponent(to.name)},${to.latitude},${to.longitude}`;
     }
     return `https://map.kakao.com/link/map/${encodeURIComponent(to.name)},${to.latitude},${to.longitude}`;
   }

@@ -104,7 +104,7 @@ export default function HomeView() {
             focus:outline-none focus:ring-4 focus:ring-primary-300"
           aria-label="코스 생성하기"
         >
-          🎲 그냥 짜줘
+          일단 나와
         </button>
       </div>
     </div>
