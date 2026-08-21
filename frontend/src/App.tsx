@@ -1,6 +1,7 @@
 import { AppProvider, useApp } from './context/AppContext';
 import Header from './components/Header';
 import HomeView from './components/HomeView';
+import CourseOptionsView from './components/CourseOptionsView';
 import ResultView from './components/ResultView';
 import SavedCourseList from './components/SavedCourseList';
 import ChatView from './components/ChatView';
@@ -24,33 +25,13 @@ function AppContent() {
           </div>
         )}
 
-        {/* 기존 폼 모드 */}
+        {/* 기존 폼 모드: 조건 설정 → 결과 순서로 한 화면씩만 표시 */}
         {currentView !== 'chat' && (
-          <div className="lg:flex lg:gap-8 lg:px-8 lg:py-6">
-            {/* 모바일: 단일 열 / 데스크톱: 왼쪽 입력 */}
-            <div
-              className={`px-4 py-6 lg:px-0 lg:py-0 lg:flex-1 lg:max-w-md
-                ${currentView === 'result' ? 'hidden lg:block' : ''}
-                ${currentView === 'saved' ? 'hidden lg:hidden' : ''}`}
-            >
-              <HomeView />
-            </div>
-
-            {/* 모바일: 결과 뷰 / 데스크톱: 오른쪽 결과 */}
-            <div
-              className={`px-4 py-6 lg:px-0 lg:py-0 lg:flex-1
-                ${currentView === 'home' ? 'hidden lg:block' : ''}
-                ${currentView === 'saved' ? 'hidden' : ''}`}
-            >
-              <ResultView />
-            </div>
-
-            {/* 저장 코스 화면 */}
-            {currentView === 'saved' && (
-              <div className="px-4 py-6 lg:px-0 lg:py-0 w-full max-w-2xl mx-auto">
-                <SavedCourseList />
-              </div>
-            )}
+          <div className="px-4 py-6 lg:px-8 max-w-2xl mx-auto">
+            {currentView === 'home' && <HomeView />}
+            {currentView === 'options' && <CourseOptionsView />}
+            {currentView === 'result' && <ResultView />}
+            {currentView === 'saved' && <SavedCourseList />}
           </div>
         )}
       </main>

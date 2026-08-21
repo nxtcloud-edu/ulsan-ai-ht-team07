@@ -26,7 +26,48 @@ import {
   canVisitDuring,
 } from '../utils/time';
 import { calculateDistance, estimateTravelTime } from '../utils/distance';
-import { searchRealPlacesByCategories, isKakaoSearchReady } from './kakao-place-search';
+import { searchRealPlacesByCategories, isKakaoSearchReady, DEFAULT_REGION } from './kakao-place-search';
+
+/** 지역과 너무 동떨어진 좌표는 무시하는 기준 거리 (미터) */
+const MAX_REASONABLE_DISTANCE_M = 100000; // 100km
+
+/**
+ * 지역(location)을 바꿨는데 예전 지역 기준의 출발지/꼭 가고 싶은 곳이 그대로 남아있으면
+ * "이동시간 28시간" 같은 말도 안 되는 결과가 나온다. 저장된 값이 현재 지역과 너무 멀면
+ * 무효한 값으로 보고 무시한다. (localStorage에 남아있던 예전 값 대비 안전장치)
+ */
+function sanitizePreferences(prefs: UserPreferences): UserPreferences {
+  const regionLat = prefs.locationCoords?.latitude ?? DEFAULT_REGION.lat;
+  const regionLng = prefs.locationCoords?.longitude ?? DEFAULT_REGION.lng;
+
+  let sanitized = prefs;
+
+  if (prefs.startCoords) {
+    const dist = calculateDistance(regionLat, regionLng, prefs.startCoords.latitude, prefs.startCoords.longitude);
+    if (dist > MAX_REASONABLE_DISTANCE_M) {
+      console.warn('[RecommendationEngine] 출발지가 선택한 지역과 너무 멀어 무시합니다:', prefs.startPlaceName);
+      sanitized = { ...sanitized, startCoords: undefined, startPlaceName: undefined };
+    }
+  }
+
+  const mustVisitPlaces = prefs.mustVisitPlaces;
+  if (mustVisitPlaces && mustVisitPlaces.length > 0) {
+    const filtered = mustVisitPlaces.filter((mv) => {
+      if (mv.latitude === undefined || mv.longitude === undefined) return true;
+      const dist = calculateDistance(regionLat, regionLng, mv.latitude, mv.longitude);
+      if (dist > MAX_REASONABLE_DISTANCE_M) {
+        console.warn('[RecommendationEngine] 꼭 가고 싶은 곳이 선택한 지역과 너무 멀어 무시합니다:', mv.name);
+        return false;
+      }
+      return true;
+    });
+    if (filtered.length !== mustVisitPlaces.length) {
+      sanitized = { ...sanitized, mustVisitPlaces: filtered };
+    }
+  }
+
+  return sanitized;
+}
 
 // ===== 상수 =====
 
@@ -187,7 +228,9 @@ interface ScoringContext {
 // ===== 코스 생성 =====
 
 /** 메인 코스 생성 함수 */
-export function generateCourse(prefs: UserPreferences): RecommendationResult {
+export function generateCourse(rawPrefs: UserPreferences): RecommendationResult {
+  const prefs = sanitizePreferences(rawPrefs);
+
   // 1. 시간 계산
   const startTime = prefs.startTime === 'now' ? getCurrentTime() : prefs.startTime;
   const endTime = prefs.endTime || addMinutes(startTime, 180); // 기본 3시간
@@ -249,7 +292,11 @@ export function generateCourse(prefs: UserPreferences): RecommendationResult {
 }
 
 /** 코스에 필요한 슬롯(카테고리) 결정 */
-function determineCourseSlots(prefs: UserPreferences, availableMinutes: number): PlaceCategory[] {
+function determineCourseSlots(
+  prefs: UserPreferences,
+  availableMinutes: number,
+  variantIndex: number = 0
+): PlaceCategory[] {
   const slots: PlaceCategory[] = [];
 
   // 원하는 활동 기반으로 슬롯 결정
@@ -257,7 +304,9 @@ function determineCourseSlots(prefs: UserPreferences, availableMinutes: number):
     for (const activity of prefs.desiredActivities) {
       const categories = ACTIVITY_TO_CATEGORY[activity];
       if (categories.length > 0) {
-        slots.push(categories[0]);
+        // 활동 하나에 하위 카테고리가 여러 개면(예: 활동적인 체험 → 볼링/방탈출/보드게임/노래방),
+        // variantIndex에 따라 다른 하위 카테고리를 골라 코스 옵션마다 다양성을 준다.
+        slots.push(categories[variantIndex % categories.length]);
       }
     }
 
@@ -361,9 +410,8 @@ function buildCourse(
 
     if (scored.length === 0) continue;
 
-    // 상위 3개 중 랜덤 선택 (약간의 변동성)
-    const topN = scored.slice(0, Math.min(3, scored.length));
-    const selected = topN[Math.floor(Math.random() * topN.length)];
+    // 가장 점수가 높은 곳을 그대로 선택 (랜덤으로 뽑으면 매번 결과가 달라져 신뢰도가 떨어짐)
+    const selected = scored[0];
     const place = selected.place;
 
     // 이동 시간 계산
@@ -711,161 +759,34 @@ export function regenerateCourse(prefs: UserPreferences): RecommendationResult {
  * 카카오 API로 실제 장소를 검색하여 코스를 생성합니다.
  * API 키가 없으면 기존 샘플 데이터 기반으로 폴백합니다.
  */
-export async function generateCourseAsync(prefs: UserPreferences): Promise<RecommendationResult> {
+export async function generateCourseAsync(rawPrefs: UserPreferences): Promise<RecommendationResult> {
+  const prefs = sanitizePreferences(rawPrefs);
+
   // 카카오 API 키가 없으면 기존 동기 방식으로 폴백
   if (!isKakaoSearchReady()) {
     return generateCourse(prefs);
   }
 
   try {
-    // 1. 시간 계산
     const startTime = prefs.startTime === 'now' ? getCurrentTime() : prefs.startTime;
     const endTime = prefs.endTime || addMinutes(startTime, 180);
     const availableMinutes = getAvailableMinutes(startTime, endTime);
-
-    // 2. 코스 슬롯(카테고리) 결정
     const slots = determineCourseSlots(prefs, availableMinutes);
     const uniqueCategories = [...new Set(slots)];
 
-    // 3. 카카오 API로 실제 장소 검색 (카테고리별 병렬)
-    const placesByCategory = await searchRealPlacesByCategories(
-      uniqueCategories,
-      prefs.location,
-      8
-    );
+    const prepared = await prepareCandidates(prefs, uniqueCategories);
+    if ('success' in prepared) return prepared; // 준비 단계에서 실패한 경우 그대로 전달
 
-    // 4. 검색 결과를 평탄화하여 후보 목록 구성
-    let candidatePlaces: Place[] = [];
-    for (const [, places] of placesByCategory) {
-      candidatePlaces.push(...places);
-    }
+    const { candidatePlaces, mustVisitAsPlaces, dayOfWeek } = prepared;
 
-    // 4-1. 출발지 좌표가 있으면 가까운 순으로 정렬
-    if (prefs.startCoords) {
-      const { latitude: sLat, longitude: sLng } = prefs.startCoords;
-      candidatePlaces.sort((a, b) => {
-        const distA = calculateDistance(sLat, sLng, a.latitude, a.longitude);
-        const distB = calculateDistance(sLat, sLng, b.latitude, b.longitude);
-        return distA - distB;
-      });
-    }
-
-    // 4-2. 꼭 가고 싶은 장소가 있으면 후보에 강제 삽입
-    const mustVisitPlaces = prefs.mustVisitPlaces || [];
-    const mustVisitAsPlaces: Place[] = [];
-    if (mustVisitPlaces.length > 0) {
-      for (const mv of mustVisitPlaces) {
-        // 이미 후보에 있는지 확인
-        const existing = candidatePlaces.find(
-          (p) => p.name === mv.name || p.id === `kakao-${mv.kakaoId}`
-        );
-        if (existing) {
-          mustVisitAsPlaces.push(existing);
-        } else if (mv.latitude && mv.longitude) {
-          // 없으면 Place 객체 생성
-          const mvPlace: Place = {
-            id: `must-visit-${mv.kakaoId || mv.name}`,
-            name: mv.name,
-            city: 'ulsan',
-            district: '',
-            neighborhood: '',
-            address: '',
-            latitude: mv.latitude,
-            longitude: mv.longitude,
-            category: 'restaurant', // 기본값, 실제로는 카카오 카테고리로 매핑해야 함
-            description: mv.name,
-            suitableFor: ['friend', 'couple', 'solo', 'parent', 'coworker'],
-            moodTags: [],
-            activityTags: [],
-            indoor: true,
-            parking: false,
-            groupSizeMin: 1,
-            groupSizeMax: 10,
-            averageCost: 10000,
-            averageDuration: 60,
-            openingHours: {
-              mon: { open: '10:00', close: '22:00' },
-              tue: { open: '10:00', close: '22:00' },
-              wed: { open: '10:00', close: '22:00' },
-              thu: { open: '10:00', close: '22:00' },
-              fri: { open: '10:00', close: '23:00' },
-              sat: { open: '10:00', close: '23:00' },
-              sun: { open: '10:00', close: '21:00' },
-            },
-            closedDays: [],
-            reservationRequired: false,
-            mapUrl: mv.placeUrl || 'https://map.kakao.com/',
-            featured: false,
-            verified: true,
-            lastUpdated: new Date().toISOString().split('T')[0],
-            isSample: false,
-            externalData: {
-              kakaoPlace: mv.kakaoId ? {
-                kakaoId: mv.kakaoId,
-                placeName: mv.name,
-                addressName: '',
-                categoryName: '',
-                placeUrl: mv.placeUrl || '',
-                latitude: mv.latitude,
-                longitude: mv.longitude,
-              } : undefined,
-              fetchedAt: new Date().toISOString(),
-            },
-          };
-          mustVisitAsPlaces.push(mvPlace);
-          candidatePlaces.push(mvPlace);
-        }
-      }
-    }
-
-    // 검색 결과가 부족하면 샘플 데이터로 폴백
-    if (candidatePlaces.length < 3) {
-      console.warn('[RecommendationEngine] 카카오 검색 결과 부족, 샘플 데이터 병합');
-      const cityInfo = locationPresetMap[prefs.location];
-      const city = cityInfo?.city || 'ulsan';
-      const samplePlaces = getPlacesByCity(city);
-      candidatePlaces = [...candidatePlaces, ...samplePlaces];
-    }
-
-    // 5. 피하고 싶은 조건 필터 (must-visit 장소는 필터 안함)
-    const mustVisitIds = new Set(mustVisitAsPlaces.map((p) => p.id));
-    candidatePlaces = candidatePlaces.filter((place) => {
-      if (mustVisitIds.has(place.id)) return true; // must-visit은 유지
-      for (const avoid of prefs.avoidConditions) {
-        const filter = AVOID_FILTERS[avoid];
-        if (filter && filter(place)) return false;
-      }
-      return true;
-    });
-
-    if (candidatePlaces.length === 0) {
-      return createNoPlacesError(prefs);
-    }
-
-    // 6. 슬롯별 장소 선택
-    // must-visit 장소를 코스에 강제 포함시키기 위해 buildCourse 전에 처리
-    const dayOfWeek = getCurrentDayOfWeek();
-    let courseStops: CourseStop[];
-
-    if (mustVisitAsPlaces.length > 0) {
-      // must-visit 장소를 먼저 배치하고 나머지를 채우는 방식
-      courseStops = buildCourseWithMustVisit(
-        candidatePlaces,
-        mustVisitAsPlaces,
-        slots,
-        prefs,
-        startTime,
-        dayOfWeek
-      );
-    } else {
-      courseStops = buildCourse(candidatePlaces, slots, prefs, startTime, dayOfWeek);
-    }
+    const courseStops = mustVisitAsPlaces.length > 0
+      ? buildCourseWithMustVisit(candidatePlaces, mustVisitAsPlaces, slots, prefs, startTime, dayOfWeek)
+      : buildCourse(candidatePlaces, slots, prefs, startTime, dayOfWeek);
 
     if (courseStops.length === 0) {
       return createNoPlacesError(prefs);
     }
 
-    // 7. 코스 객체 생성
     const course = assembleCourse(courseStops, prefs);
     return { success: true, course };
   } catch (error) {
@@ -873,6 +794,283 @@ export async function generateCourseAsync(prefs: UserPreferences): Promise<Recom
     // 실패 시 기존 방식으로 폴백
     return generateCourse(prefs);
   }
+}
+
+/**
+ * 같은 후보군에서 서로 다른 코스를 여러 개(기본 3개) 생성합니다.
+ * 카카오 검색은 한 번만 하고, 옵션마다 슬롯(카테고리) 조합을 다르게 채워서 다양성을 만듭니다.
+ * 사용자가 원하는 활동을 직접 고르지 않은 경우(랜덤/미선택)엔 미리 정의된 테마별
+ * 카테고리 조합을 사용해 "맛집 위주", "액티비티 위주" 처럼 서로 다른 성격의 코스를 만듭니다.
+ */
+export async function generateCourseOptionsAsync(
+  rawPrefs: UserPreferences,
+  count: number = 3
+): Promise<RecommendationResult> {
+  const prefs = sanitizePreferences(rawPrefs);
+
+  const buildOneSync = (): Course | null => {
+    const result = generateCourse(prefs);
+    return result.success && result.course ? result.course : null;
+  };
+
+  if (!isKakaoSearchReady()) {
+    return buildCourseOptionsFrom(buildOneSync, count, prefs);
+  }
+
+  try {
+    const startTime = prefs.startTime === 'now' ? getCurrentTime() : prefs.startTime;
+    const endTime = prefs.endTime || addMinutes(startTime, 180);
+    const availableMinutes = getAvailableMinutes(startTime, endTime);
+
+    const useThemes = prefs.desiredActivities.length === 0 || prefs.desiredActivities.includes('랜덤');
+
+    // 옵션별 슬롯(카테고리) 조합 결정
+    // 활동을 직접 고른 경우엔 카테고리 큰 틀은 유지하되, 활동 하위 종류(예: 볼링/방탈출/보드게임)를
+    // 옵션마다 다르게 뽑아 "코스 1/2/3"이 실제로 다른 카테고리 조합이 되도록 한다.
+    const slotSets: { name?: string; slots: PlaceCategory[] }[] = useThemes
+      ? pickThemedSlotSets(prefs, availableMinutes, count)
+      : Array.from({ length: count }, (_, i) => ({
+          slots: determineCourseSlots(prefs, availableMinutes, i),
+        }));
+
+    const allCategories = [...new Set(slotSets.flatMap((s) => s.slots))];
+    const prepared = await prepareCandidates(prefs, allCategories);
+    if ('success' in prepared) return prepared;
+
+    const { candidatePlaces, mustVisitAsPlaces, dayOfWeek } = prepared;
+
+    const courses: Course[] = [];
+    const seen = new Set<string>();
+
+    for (const { name, slots } of slotSets) {
+      // 같은 슬롯셋으로 몇 번 더 시도해서 겹치지 않는 조합을 찾는다
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const courseStops = mustVisitAsPlaces.length > 0
+          ? buildCourseWithMustVisit(candidatePlaces, mustVisitAsPlaces, slots, prefs, startTime, dayOfWeek)
+          : buildCourse(candidatePlaces, slots, prefs, startTime, dayOfWeek);
+
+        if (courseStops.length === 0) continue;
+
+        const signature = courseStops.map((s) => s.place.id).join(',');
+        if (seen.has(signature)) continue;
+        seen.add(signature);
+
+        const course = assembleCourse(courseStops, prefs);
+        if (name) course.name = name;
+        courses.push(course);
+        break;
+      }
+    }
+
+    if (courses.length === 0) {
+      return createNoPlacesError(prefs);
+    }
+    return { success: true, courses };
+  } catch (error) {
+    console.error('[RecommendationEngine] 코스 옵션 생성 실패, 폴백:', error);
+    return buildCourseOptionsFrom(buildOneSync, count, prefs);
+  }
+}
+
+/** 활동 미선택 시 사용할 테마별 카테고리 조합 */
+const THEMED_FLOW_PATTERNS: { name: string; categories: PlaceCategory[] }[] = [
+  { name: '든든한 맛집 코스', categories: ['restaurant', 'walk', 'cafe', 'photo_studio'] },
+  { name: '신나는 액티비티 코스', categories: ['restaurant', 'bowling', 'accessories_shop', 'cafe'] },
+  { name: '감성 나들이 코스', categories: ['cafe', 'exhibition', 'restaurant', 'walk'] },
+  { name: '보드게임 한 판 코스', categories: ['restaurant', 'board_game', 'accessories_shop', 'cafe'] },
+  { name: '방탈출 스릴 코스', categories: ['restaurant', 'escape_room', 'photo_studio', 'cafe'] },
+  { name: '노래방 신나는 코스', categories: ['restaurant', 'karaoke', 'cafe'] },
+  { name: '공방 체험 코스', categories: ['restaurant', 'craft_workshop', 'cafe'] },
+];
+
+/** count개의 서로 다른 테마 슬롯셋을 고른다 (시간에 맞게 슬롯 수도 조정) */
+function pickThemedSlotSets(
+  prefs: UserPreferences,
+  availableMinutes: number,
+  count: number
+): { name: string; slots: PlaceCategory[] }[] {
+  let patterns = THEMED_FLOW_PATTERNS;
+  if (prefs.companion === 'parent') {
+    patterns = patterns.filter(
+      (p) => !p.categories.includes('karaoke') && !p.categories.includes('escape_room')
+    );
+  }
+
+  const shuffled = [...patterns].sort(() => Math.random() - 0.5);
+  const maxSlots = Math.floor(availableMinutes / 45);
+
+  return Array.from({ length: count }, (_, i) => {
+    const pattern = shuffled[i % shuffled.length];
+    return {
+      name: pattern.name,
+      slots: pattern.categories.slice(0, Math.min(pattern.categories.length, maxSlots, 6)),
+    };
+  });
+}
+
+/** buildOne을 여러 번 호출해 서로 다른 코스를 count개까지 모은다 (중복 제거) */
+function buildCourseOptionsFrom(
+  buildOne: () => Course | null,
+  count: number,
+  prefs: UserPreferences
+): RecommendationResult {
+  const courses: Course[] = [];
+  const seen = new Set<string>();
+  const maxAttempts = count * 4;
+
+  for (let attempt = 0; attempt < maxAttempts && courses.length < count; attempt++) {
+    const course = buildOne();
+    if (!course) continue;
+
+    const signature = course.stops.map((s) => s.place.id).join(',');
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    courses.push(course);
+  }
+
+  if (courses.length === 0) {
+    return createNoPlacesError(prefs);
+  }
+  return { success: true, courses };
+}
+
+interface PreparedCandidates {
+  candidatePlaces: Place[];
+  mustVisitAsPlaces: Place[];
+  dayOfWeek: number;
+}
+
+/** 코스 생성 전 공통 준비 단계: 카카오 검색(주어진 카테고리 전체) → 후보 구성 */
+async function prepareCandidates(
+  prefs: UserPreferences,
+  categoriesToSearch: PlaceCategory[]
+): Promise<PreparedCandidates | RecommendationResult> {
+  // 카카오 API로 실제 장소 검색 (카테고리별 병렬)
+  const region = prefs.locationCoords
+    ? { lat: prefs.locationCoords.latitude, lng: prefs.locationCoords.longitude, regionName: prefs.location }
+    : DEFAULT_REGION;
+  // "지금 뭐 땡겨요?"로 음식 취향을 골랐으면 식당 검색 키워드에 반영
+  const keywordOverrides = prefs.foodPreference
+    ? { restaurant: [`${prefs.foodPreference} 맛집`, `${prefs.foodPreference}`] }
+    : undefined;
+  const placesByCategory = await searchRealPlacesByCategories(
+    categoriesToSearch,
+    region,
+    8,
+    keywordOverrides
+  );
+
+  // 4. 검색 결과를 평탄화하여 후보 목록 구성
+  let candidatePlaces: Place[] = [];
+  for (const [, places] of placesByCategory) {
+    candidatePlaces.push(...places);
+  }
+
+  // 4-1. 출발지 좌표가 있으면 가까운 순으로 정렬
+  if (prefs.startCoords) {
+    const { latitude: sLat, longitude: sLng } = prefs.startCoords;
+    candidatePlaces.sort((a, b) => {
+      const distA = calculateDistance(sLat, sLng, a.latitude, a.longitude);
+      const distB = calculateDistance(sLat, sLng, b.latitude, b.longitude);
+      return distA - distB;
+    });
+  }
+
+  // 4-2. 꼭 가고 싶은 장소가 있으면 후보에 강제 삽입
+  const mustVisitPlaces = prefs.mustVisitPlaces || [];
+  const mustVisitAsPlaces: Place[] = [];
+  if (mustVisitPlaces.length > 0) {
+    for (const mv of mustVisitPlaces) {
+      // 이미 후보에 있는지 확인
+      const existing = candidatePlaces.find(
+        (p) => p.name === mv.name || p.id === `kakao-${mv.kakaoId}`
+      );
+      if (existing) {
+        mustVisitAsPlaces.push(existing);
+      } else if (mv.latitude && mv.longitude) {
+        // 없으면 Place 객체 생성
+        const mvPlace: Place = {
+          id: `must-visit-${mv.kakaoId || mv.name}`,
+          name: mv.name,
+          city: 'ulsan',
+          district: '',
+          neighborhood: '',
+          address: '',
+          latitude: mv.latitude,
+          longitude: mv.longitude,
+          category: 'restaurant', // 기본값, 실제로는 카카오 카테고리로 매핑해야 함
+          description: mv.name,
+          suitableFor: ['friend', 'couple', 'solo', 'parent', 'coworker'],
+          moodTags: [],
+          activityTags: [],
+          indoor: true,
+          parking: false,
+          groupSizeMin: 1,
+          groupSizeMax: 10,
+          averageCost: 10000,
+          averageDuration: 60,
+          openingHours: {
+            mon: { open: '00:00', close: '23:59' },
+            tue: { open: '00:00', close: '23:59' },
+            wed: { open: '00:00', close: '23:59' },
+            thu: { open: '00:00', close: '23:59' },
+            fri: { open: '00:00', close: '23:59' },
+            sat: { open: '00:00', close: '23:59' },
+            sun: { open: '00:00', close: '23:59' },
+          },
+          closedDays: [],
+          reservationRequired: false,
+          mapUrl: mv.placeUrl || 'https://map.kakao.com/',
+          featured: false,
+          verified: true,
+          lastUpdated: new Date().toISOString().split('T')[0],
+          isSample: false,
+          externalData: {
+            kakaoPlace: mv.kakaoId ? {
+              kakaoId: mv.kakaoId,
+              placeName: mv.name,
+              addressName: '',
+              categoryName: '',
+              placeUrl: mv.placeUrl || '',
+              latitude: mv.latitude,
+              longitude: mv.longitude,
+            } : undefined,
+            fetchedAt: new Date().toISOString(),
+          },
+        };
+        mustVisitAsPlaces.push(mvPlace);
+        candidatePlaces.push(mvPlace);
+      }
+    }
+  }
+
+  // 검색 결과가 부족하면 샘플 데이터로 폴백
+  if (candidatePlaces.length < 3) {
+    console.warn('[RecommendationEngine] 카카오 검색 결과 부족, 샘플 데이터 병합');
+    const cityInfo = locationPresetMap[prefs.location];
+    const city = cityInfo?.city || 'ulsan';
+    const samplePlaces = getPlacesByCity(city);
+    candidatePlaces = [...candidatePlaces, ...samplePlaces];
+  }
+
+  // 5. 피하고 싶은 조건 필터 (must-visit 장소는 필터 안함)
+  const mustVisitIds = new Set(mustVisitAsPlaces.map((p) => p.id));
+  candidatePlaces = candidatePlaces.filter((place) => {
+    if (mustVisitIds.has(place.id)) return true; // must-visit은 유지
+    for (const avoid of prefs.avoidConditions) {
+      const filter = AVOID_FILTERS[avoid];
+      if (filter && filter(place)) return false;
+    }
+    return true;
+  });
+
+  if (candidatePlaces.length === 0) {
+    return createNoPlacesError(prefs);
+  }
+
+  const dayOfWeek = getCurrentDayOfWeek();
+
+  return { candidatePlaces, mustVisitAsPlaces, dayOfWeek };
 }
 
 /** must-visit 장소를 포함하여 코스를 구성 */
@@ -954,8 +1152,8 @@ function buildCourseWithMustVisit(
 
       if (scored.length === 0) continue;
 
-      const topN = scored.slice(0, Math.min(3, scored.length));
-      const selected = topN[Math.floor(Math.random() * topN.length)];
+      // 가장 점수가 높은 곳을 그대로 선택 (랜덤으로 뽑으면 매번 결과가 달라져 신뢰도가 떨어짐)
+      const selected = scored[0];
       place = selected.place;
       reason = selected.reasons[0] || generateReason(place, prefs);
     }

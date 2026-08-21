@@ -1,19 +1,19 @@
 import { useApp } from '../context/AppContext';
 import { QuickPreset } from '../types';
 import { quickPresets, getPresetPreferences } from '../services/quick-presets';
-import { generateCourseAsync } from '../services/recommendation-engine';
+import { generateCourseOptionsAsync } from '../services/recommendation-engine';
 
 export default function QuickRecommendation() {
-  const { updatePreferences, setCourse, setLoading, setError } = useApp();
+  const { updatePreferences, setCourseOptions, setLoading, setError } = useApp();
 
   const handleQuickSelect = async (presetId: QuickPreset) => {
     setLoading(true);
     const prefs = getPresetPreferences(presetId);
     updatePreferences(prefs);
 
-    const result = await generateCourseAsync(prefs);
-    if (result.success && result.course) {
-      setCourse(result.course);
+    const result = await generateCourseOptionsAsync(prefs);
+    if (result.success && result.courses) {
+      setCourseOptions(result.courses);
     } else if (result.error) {
       setError(result.error);
     }

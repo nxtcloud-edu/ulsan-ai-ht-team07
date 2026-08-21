@@ -1,17 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { LocationPreset, MustVisitPlace } from '../types';
+import { MustVisitPlace } from '../types';
 import { searchKakaoPlace } from '../services/kakao-local-service';
 import { KakaoPlaceInfo } from '../types';
-
-const locations: { value: LocationPreset; label: string }[] = [
-  { value: 'ulsan_univ', label: '울산대학교·무거동' },
-  { value: 'samsan', label: '삼산동' },
-  { value: 'seongnam', label: '성남동' },
-  { value: 'ilsan_daewangam', label: '일산지·대왕암' },
-  { value: 'ulju', label: '울주군' },
-  { value: 'custom', label: '직접 입력' },
-];
 
 /** 카카오 장소 검색 결과 드롭다운 */
 function PlaceSearchInput({
@@ -106,8 +97,22 @@ function PlaceSearchInput({
 
 export default function LocationSelector() {
   const { state, updatePreferences } = useApp();
-  const selected = state.preferences.location;
   const mustVisitPlaces = state.preferences.mustVisitPlaces || [];
+
+  const handleRegionSelect = (place: KakaoPlaceInfo) => {
+    // 지역이 바뀌면 이전 지역 기준으로 골랐던 출발지/꼭 가고 싶은 곳은 더 이상 유효하지 않으므로 초기화
+    updatePreferences({
+      location: place.roadAddressName || place.addressName || place.placeName,
+      locationCoords: { latitude: place.latitude, longitude: place.longitude },
+      startPlaceName: undefined,
+      startCoords: undefined,
+      mustVisitPlaces: [],
+    });
+  };
+
+  const handleRegionClear = () => {
+    updatePreferences({ location: '', locationCoords: undefined });
+  };
 
   const handleStartPlaceSelect = (place: KakaoPlaceInfo) => {
     updatePreferences({
@@ -146,37 +151,12 @@ export default function LocationSelector() {
       <h2 id="location-label" className="text-lg font-semibold text-navy">
         어디서 놀아요?
       </h2>
-      <div className="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="location-label">
-        {locations.map(({ value, label }) => (
-          <button
-            key={value}
-            role="radio"
-            aria-checked={selected === value}
-            onClick={() => updatePreferences({ location: value })}
-            className={`px-4 py-2.5 rounded-2xl border-2 text-sm font-medium transition-all duration-200
-              ${selected === value
-                ? 'border-primary-400 bg-primary-50 text-primary-700'
-                : 'border-gray-200 bg-white text-charcoal hover:border-primary-200'
-              }
-              focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-1`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {selected === 'custom' && (
-        <input
-          type="text"
-          placeholder="지역명을 입력하세요"
-          value={state.preferences.customLocation || ''}
-          onChange={(e) => updatePreferences({ customLocation: e.target.value })}
-          className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl text-sm
-            focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-200
-            placeholder:text-gray-400"
-          aria-label="지역 직접 입력"
-        />
-      )}
+      <PlaceSearchInput
+        placeholder="지역을 검색하세요 (예: 서울 강남구, 부산 해운대, 울산 삼산동...)"
+        value={state.preferences.location}
+        onSelect={handleRegionSelect}
+        onClear={handleRegionClear}
+      />
 
       {/* 출발지 설정 */}
       <div className="space-y-2 pt-2">

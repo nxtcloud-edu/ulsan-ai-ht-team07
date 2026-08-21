@@ -11,7 +11,7 @@ interface PlaceCardProps {
   isFirst: boolean;
 }
 
-const categoryLabels: Record<string, string> = {
+export const categoryLabels: Record<string, string> = {
   restaurant: '식사',
   cafe: '카페',
   bowling: '볼링',
@@ -59,14 +59,13 @@ function BlogReviewPreview({ reviews }: { reviews: NaverBlogReview[] }) {
 }
 
 /** 외부 링크 버튼들 */
-function ExternalLinks({ placeName, neighborhood, category, externalData }: {
+function ExternalLinks({ placeName, neighborhood, region, category, externalData }: {
   placeName: string;
   neighborhood: string;
+  region: string;
   category: string;
   externalData?: CourseStop['place']['externalData'];
 }) {
-  const region = '울산';
-
   // 카카오맵 URL: externalData에서 가져오거나 검색 URL 생성
   const kakaoUrl = externalData?.kakaoPlace?.placeUrl
     || getKakaoMapSearchUrl(placeName, region);
@@ -201,17 +200,28 @@ export default function PlaceCard({ stop, isFirst }: PlaceCardProps) {
       )}
 
       {/* 상세 정보 */}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
-        <span>💰 {formatCost(stop.estimatedCost)}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+        <span>💰 {formatCost(stop.estimatedCost)} (추정)</span>
         <span>{stop.place.indoor ? '🏠 실내' : '🌤️ 야외'}</span>
         {stop.place.parking && <span>🅿️ 주차가능</span>}
         {stop.place.reservationRequired && <span>📞 예약 필요</span>}
+        {stop.place.mapUrl && (
+          <a
+            href={stop.place.mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary-600 hover:underline"
+          >
+            🍽️ 실제 메뉴·가격 보기
+          </a>
+        )}
       </div>
 
       {/* 외부 후기 링크 (네이버/카카오/인스타) */}
       <ExternalLinks
         placeName={stop.place.name}
         neighborhood={stop.place.neighborhood}
+        region={stop.place.district ? `${stop.place.city} ${stop.place.district}` : stop.place.city}
         category={stop.place.category}
         externalData={externalData}
       />

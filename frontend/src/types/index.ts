@@ -149,18 +149,20 @@ export type AvoidCondition =
   | '많이 걷기'
   | '시끄러운 장소';
 
-export type LocationPreset =
-  | 'ulsan_univ'
-  | 'samsan'
-  | 'seongnam'
-  | 'ilsan_daewangam'
-  | 'ulju'
-  | 'custom';
+export type FoodPreference =
+  | '한식'
+  | '중식'
+  | '일식'
+  | '양식'
+  | '분식'
+  | '아시안'
+  | '고기·구이'
+  | '패스트푸드';
 
 export interface UserPreferences {
   companion: CompanionType;
-  location: LocationPreset;
-  customLocation?: string;
+  location: string; // 검색으로 선택한 지역명 (자유 텍스트, 전국 지원)
+  locationCoords?: { latitude: number; longitude: number }; // 선택한 지역의 좌표
   groupSize: number;
   startTime: string; // "HH:mm" 또는 "now"
   endTime?: string; // 미설정시 startTime + 3시간
@@ -168,6 +170,7 @@ export interface UserPreferences {
   transport: TransportType;
   desiredActivities: DesiredActivity[];
   avoidConditions: AvoidCondition[];
+  foodPreference: FoodPreference | null; // 지금 땡기는 음식 종류. null = 상관없음
   additionalRequest?: string;
 
   // 출발지 / 꼭 가고 싶은 장소
@@ -248,6 +251,7 @@ export type QuickPreset =
 export interface RecommendationResult {
   success: boolean;
   course?: Course;
+  courses?: Course[]; // 여러 개의 코스 후보를 반환할 때 사용
   error?: RecommendationError;
 }
 
@@ -264,12 +268,13 @@ export interface RelaxSuggestion {
 
 // ===== 앱 상태 =====
 
-export type AppView = 'home' | 'result' | 'saved' | 'chat';
+export type AppView = 'home' | 'options' | 'result' | 'saved' | 'chat';
 
 export interface AppState {
   currentView: AppView;
   preferences: UserPreferences;
   currentCourse: Course | null;
+  courseOptions: Course[] | null;
   savedCourses: Course[];
   isLoading: boolean;
   error: RecommendationError | null;

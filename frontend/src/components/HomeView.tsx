@@ -1,22 +1,23 @@
 import { useApp } from '../context/AppContext';
-import { generateCourseAsync } from '../services/recommendation-engine';
+import { generateCourseOptionsAsync } from '../services/recommendation-engine';
 import CompanionSelector from './CompanionSelector';
 import LocationSelector from './LocationSelector';
 import TimeSelector from './TimeSelector';
 import BudgetSelector from './BudgetSelector';
 import ActivityTags from './ActivityTags';
+import FoodPreferenceSelector from './FoodPreferenceSelector';
 import AvoidanceTags from './AvoidanceTags';
 import QuickRecommendation from './QuickRecommendation';
 
 export default function HomeView() {
-  const { state, updatePreferences, setCourse, setLoading, setError, setView } = useApp();
+  const { state, updatePreferences, setCourseOptions, setLoading, setError, setView } = useApp();
 
   const handleGenerate = async () => {
     setLoading(true);
 
-    const result = await generateCourseAsync(state.preferences);
-    if (result.success && result.course) {
-      setCourse(result.course);
+    const result = await generateCourseOptionsAsync(state.preferences);
+    if (result.success && result.courses) {
+      setCourseOptions(result.courses);
     } else if (result.error) {
       setError(result.error);
     }
@@ -72,6 +73,7 @@ export default function HomeView() {
         <TimeSelector />
         <BudgetSelector />
         <ActivityTags />
+        <FoodPreferenceSelector />
         <AvoidanceTags />
 
         {/* 추가 요청 */}

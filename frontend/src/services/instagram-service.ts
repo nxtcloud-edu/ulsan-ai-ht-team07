@@ -79,8 +79,8 @@ export function generateInstagramKeywords(
   const categoryTags = CATEGORY_HASHTAGS[category] || [];
   keywords.push(...categoryTags.slice(0, 2));
 
-  // 4. 지역 해시태그
-  const regionTags = REGION_HASHTAGS[region] || REGION_HASHTAGS['울산'] || [];
+  // 4. 지역 해시태그 (매핑에 없는 지역은 지역명 자체를 해시태그로)
+  const regionTags = REGION_HASHTAGS[region] || [region.replace(/\s/g, '')];
   keywords.push(...regionTags.slice(0, 1));
 
   // 중복 제거
@@ -133,5 +133,5 @@ export function getBestInstagramUrl(
     return getInstagramHashtagUrl(`${neighborhood}${catKeyword}`);
   }
 
-  return getInstagramHashtagUrl(neighborhood || '울산');
+  return getInstagramHashtagUrl(neighborhood || '데이트코스');
 }

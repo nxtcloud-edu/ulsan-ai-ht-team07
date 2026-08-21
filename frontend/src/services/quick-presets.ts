@@ -30,7 +30,8 @@ export function getPresetPreferences(preset: QuickPreset): UserPreferences {
   const now = getCurrentTime();
   const base: UserPreferences = {
     companion: 'friend',
-    location: 'ulsan_univ',
+    location: '울산 남구 무거동',
+    locationCoords: { latitude: 35.5425, longitude: 129.2564 },
     groupSize: 2,
     startTime: now,
     endTime: undefined,
@@ -38,6 +39,7 @@ export function getPresetPreferences(preset: QuickPreset): UserPreferences {
     transport: 'any',
     desiredActivities: ['랜덤'],
     avoidConditions: [],
+    foodPreference: null,
   };
 
   switch (preset) {

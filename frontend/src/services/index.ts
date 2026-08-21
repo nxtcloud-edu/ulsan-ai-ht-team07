@@ -1,6 +1,7 @@
 export {
   generateCourse,
   generateCourseAsync,
+  generateCourseOptionsAsync,
   modifyCourse,
   reduceBudgetCourse,
   reduceDistanceCourse,

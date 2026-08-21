@@ -86,14 +86,18 @@ const CATEGORY_COST: Record<PlaceCategory, number> = {
   shopping: 20000,
 };
 
-/** 지역 프리셋별 검색 기준 좌표 */
-export const REGION_COORDS: Record<string, { lat: number; lng: number; regionName: string }> = {
-  ulsan_univ: { lat: 35.5425, lng: 129.2564, regionName: '울산 남구 무거동' },
-  samsan: { lat: 35.5387, lng: 129.3365, regionName: '울산 남구 삼산동' },
-  seongnam: { lat: 35.5544, lng: 129.3156, regionName: '울산 중구 성남동' },
-  ilsan_daewangam: { lat: 35.5836, lng: 129.4355, regionName: '울산 동구 일산동' },
-  ulju: { lat: 35.5209, lng: 129.1830, regionName: '울산 울주군' },
-  custom: { lat: 35.5384, lng: 129.3114, regionName: '울산' },
+/** 검색 기준 지역 (좌표 + 지역명) */
+export interface SearchRegion {
+  lat: number;
+  lng: number;
+  regionName: string;
+}
+
+/** 지역을 아직 선택하지 않았을 때 쓰는 기본값 (울산대학교·무거동) */
+export const DEFAULT_REGION: SearchRegion = {
+  lat: 35.5425,
+  lng: 129.2564,
+  regionName: '울산 남구 무거동',
 };
 
 /**
@@ -139,9 +143,11 @@ function kakaoDocToPlace(doc: KakaoDocument, category: PlaceCategory, regionName
   const subCategory = categoryParts.length > 2 ? categoryParts.slice(2).join(' ') : undefined;
 
   // 주소에서 동네 추출
+  // 지번 주소 형식: [시/도] [구/군] [동] [번지] (예: "울산 남구 달동 1282-3")
   const addressParts = doc.address_name.split(' ');
-  const neighborhood = addressParts.length >= 4 ? addressParts[3] : addressParts[2] || '';
-  const district = addressParts.length >= 3 ? addressParts[2] : '';
+  const city = addressParts[0] || 'ulsan';
+  const district = addressParts.length >= 2 ? addressParts[1] : '';
+  const neighborhood = addressParts.length >= 3 ? addressParts[2] : '';
 
   const kakaoPlaceInfo: KakaoPlaceInfo = {
     kakaoId: doc.id,
@@ -158,7 +164,7 @@ function kakaoDocToPlace(doc: KakaoDocument, category: PlaceCategory, regionName
   return {
     id: `kakao-${doc.id}`,
     name: doc.place_name,
-    city: 'ulsan',
+    city,
     district,
     neighborhood,
     address: doc.road_address_name || doc.address_name,
@@ -176,14 +182,16 @@ function kakaoDocToPlace(doc: KakaoDocument, category: PlaceCategory, regionName
     groupSizeMax: 10,
     averageCost: CATEGORY_COST[category],
     averageDuration: CATEGORY_DURATION[category],
+    // 카카오 API는 실제 영업시간을 제공하지 않음. 없는 데이터를 지어내면 이른/늦은 시간대
+    // 요청이 죄다 걸러지는 문제가 생기므로, 항상 방문 가능한 것으로 취급한다.
     openingHours: {
-      mon: { open: '10:00', close: '22:00' },
-      tue: { open: '10:00', close: '22:00' },
-      wed: { open: '10:00', close: '22:00' },
-      thu: { open: '10:00', close: '22:00' },
-      fri: { open: '10:00', close: '23:00' },
-      sat: { open: '10:00', close: '23:00' },
-      sun: { open: '10:00', close: '21:00' },
+      mon: { open: '00:00', close: '23:59' },
+      tue: { open: '00:00', close: '23:59' },
+      wed: { open: '00:00', close: '23:59' },
+      thu: { open: '00:00', close: '23:59' },
+      fri: { open: '00:00', close: '23:59' },
+      sat: { open: '00:00', close: '23:59' },
+      sun: { open: '00:00', close: '23:59' },
     },
     closedDays: [],
     reservationRequired: false,
@@ -203,54 +211,52 @@ function kakaoDocToPlace(doc: KakaoDocument, category: PlaceCategory, regionName
  * 특정 카테고리의 실제 장소를 카카오 API로 검색합니다.
  *
  * @param category - 장소 카테고리
- * @param locationPreset - 지역 프리셋 키
+ * @param region - 검색 기준 지역 (좌표 + 지역명)
  * @param count - 가져올 장소 수
  */
 export async function searchRealPlaces(
   category: PlaceCategory,
-  locationPreset: string,
+  region: SearchRegion,
   count: number = 5,
+  keywordOverride?: string[],
 ): Promise<Place[]> {
-  const region = REGION_COORDS[locationPreset] || REGION_COORDS['custom'];
-  const keywords = CATEGORY_SEARCH_KEYWORDS[category];
+  const keywords = keywordOverride || CATEGORY_SEARCH_KEYWORDS[category];
 
   if (!keywords || keywords.length === 0) return [];
 
-  // 첫 번째 키워드 + 지역명으로 검색
-  const keyword = `${region.regionName} ${keywords[0]}`;
-  const docs = await searchKeyword(keyword, region.lat, region.lng, 5000, count);
-
-  if (docs.length > 0) {
-    return docs.map((doc) => kakaoDocToPlace(doc, category, region.regionName));
+  // 좌표+반경으로 이미 위치를 제한하므로, 검색어는 카테고리 키워드만 사용한다.
+  // (지역명을 텍스트 검색어에 같이 넣으면 도로명 주소처럼 구체적인 지역명일 때
+  //  거의 매칭되지 않아 결과가 0건이 되는 문제가 있었다.)
+  for (const kw of keywords) {
+    const docs = await searchKeyword(kw, region.lat, region.lng, 5000, count);
+    if (docs.length > 0) {
+      return docs.map((doc) => kakaoDocToPlace(doc, category, region.regionName));
+    }
   }
 
-  // 첫 키워드로 못 찾으면 두 번째 키워드로 시도
-  if (keywords.length > 1) {
-    const keyword2 = `${region.regionName} ${keywords[1]}`;
-    const docs2 = await searchKeyword(keyword2, region.lat, region.lng, 5000, count);
-    return docs2.map((doc) => kakaoDocToPlace(doc, category, region.regionName));
-  }
-
-  return [];
+  // 그래도 못 찾으면 반경을 넓혀 재시도
+  const docsWide = await searchKeyword(keywords[0], region.lat, region.lng, 15000, count);
+  return docsWide.map((doc) => kakaoDocToPlace(doc, category, region.regionName));
 }
 
 /**
  * 여러 카테고리의 실제 장소를 한번에 검색합니다.
  *
  * @param categories - 검색할 카테고리 목록
- * @param locationPreset - 지역 프리셋 키
+ * @param region - 검색 기준 지역 (좌표 + 지역명)
  * @param countPerCategory - 카테고리당 가져올 장소 수
  */
 export async function searchRealPlacesByCategories(
   categories: PlaceCategory[],
-  locationPreset: string,
+  region: SearchRegion,
   countPerCategory: number = 5,
+  keywordOverrides?: Partial<Record<PlaceCategory, string[]>>,
 ): Promise<Map<PlaceCategory, Place[]>> {
   const results = new Map<PlaceCategory, Place[]>();
 
   // 병렬로 모든 카테고리 검색
   const promises = categories.map(async (category) => {
-    const places = await searchRealPlaces(category, locationPreset, countPerCategory);
+    const places = await searchRealPlaces(category, region, countPerCategory, keywordOverrides?.[category]);
     return { category, places };
   });
 

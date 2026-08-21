@@ -10,7 +10,6 @@
 import {
   UserPreferences,
   CompanionType,
-  LocationPreset,
   DesiredActivity,
   AvoidCondition,
   CourseEditType,
@@ -75,13 +74,16 @@ class RuleBasedAIService implements AIService {
       result.groupSize = parseInt(numMatch[1]);
     }
 
-    // 지역 감지
+    // 지역 감지 (자주 언급되는 울산 동네만 좌표까지 인식, 그 외는 사용자가 직접 검색)
     if (input.includes('울산대') || input.includes('무거동') || input.includes('울대')) {
-      result.location = 'ulsan_univ' as LocationPreset;
+      result.location = '울산 남구 무거동';
+      result.locationCoords = { latitude: 35.5425, longitude: 129.2564 };
     } else if (input.includes('삼산')) {
-      result.location = 'samsan' as LocationPreset;
+      result.location = '울산 남구 삼산동';
+      result.locationCoords = { latitude: 35.5387, longitude: 129.3365 };
     } else if (input.includes('성남')) {
-      result.location = 'seongnam' as LocationPreset;
+      result.location = '울산 중구 성남동';
+      result.locationCoords = { latitude: 35.5544, longitude: 129.3156 };
     }
 
     // 예산 감지

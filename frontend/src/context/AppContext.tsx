@@ -12,7 +12,8 @@ import { enrichCourseWithExternalData } from '../services/external-data-service'
 
 const defaultPreferences: UserPreferences = {
   companion: 'friend',
-  location: 'ulsan_univ',
+  location: '울산 남구 무거동',
+  locationCoords: { latitude: 35.5425, longitude: 129.2564 },
   groupSize: 2,
   startTime: 'now',
   endTime: undefined,
@@ -20,6 +21,7 @@ const defaultPreferences: UserPreferences = {
   transport: 'any',
   desiredActivities: [],
   avoidConditions: [],
+  foodPreference: null,
   additionalRequest: '',
 };
 
@@ -27,6 +29,7 @@ const initialState: AppState = {
   currentView: 'home',
   preferences: defaultPreferences,
   currentCourse: null,
+  courseOptions: null,
   savedCourses: [],
   isLoading: false,
   error: null,
@@ -39,6 +42,7 @@ type AppAction =
   | { type: 'SET_PREFERENCES'; payload: Partial<UserPreferences> }
   | { type: 'RESET_PREFERENCES' }
   | { type: 'SET_COURSE'; payload: Course }
+  | { type: 'SET_COURSE_OPTIONS'; payload: Course[] }
   | { type: 'CLEAR_COURSE' }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: RecommendationError | null }
@@ -64,6 +68,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
     case 'SET_COURSE':
       return { ...state, currentCourse: action.payload, isLoading: false, error: null };
+
+    case 'SET_COURSE_OPTIONS':
+      return { ...state, courseOptions: action.payload, isLoading: false, error: null };
 
     case 'CLEAR_COURSE':
       return { ...state, currentCourse: null };
@@ -110,6 +117,7 @@ interface AppContextValue {
   updatePreferences: (prefs: Partial<UserPreferences>) => void;
   resetPreferences: () => void;
   setCourse: (course: Course) => void;
+  setCourseOptions: (courses: Course[]) => void;
   clearCourse: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: RecommendationError | null) => void;
@@ -193,6 +201,10 @@ export function AppProvider({ children }: AppProviderProps) {
       console.warn('[AppContext] 외부 데이터 로드 실패 (코스는 정상 표시됨):', err);
     });
   }, []);
+  const setCourseOptions = (courses: Course[]) => {
+    dispatch({ type: 'SET_COURSE_OPTIONS', payload: courses });
+    setView('options');
+  };
   const clearCourse = () => dispatch({ type: 'CLEAR_COURSE' });
   const setLoading = (loading: boolean) => dispatch({ type: 'SET_LOADING', payload: loading });
   const setError = (error: RecommendationError | null) =>
@@ -213,6 +225,7 @@ export function AppProvider({ children }: AppProviderProps) {
     updatePreferences,
     resetPreferences,
     setCourse,
+    setCourseOptions,
     clearCourse,
     setLoading,
     setError,

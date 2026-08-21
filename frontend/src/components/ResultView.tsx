@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import CourseTimeline from './CourseTimeline';
+import CourseMapView from './CourseMapView';
 import CourseEditActions from './CourseEditActions';
 import ErrorView from './ErrorView';
 import { shareCourseAsFeed, isKakaoShareReady } from '../services/kakao-share-service';
@@ -7,6 +9,7 @@ import { shareCourseAsFeed, isKakaoShareReady } from '../services/kakao-share-se
 export default function ResultView() {
   const { state, setView, saveCourse } = useApp();
   const { currentCourse, error } = state;
+  const [tab, setTab] = useState<'timeline' | 'map'>('timeline');
 
   if (error) {
     return <ErrorView error={error} />;
@@ -50,8 +53,31 @@ export default function ResultView() {
         ← 조건 다시 설정
       </button>
 
-      {/* 코스 타임라인 */}
-      <CourseTimeline course={currentCourse} />
+      {/* 타임라인 / 지도 탭 */}
+      <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl" role="tablist" aria-label="코스 보기 방식">
+        <button
+          role="tab"
+          aria-selected={tab === 'timeline'}
+          onClick={() => setTab('timeline')}
+          className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all
+            ${tab === 'timeline' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-500'}`}
+        >
+          🕐 타임라인
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'map'}
+          onClick={() => setTab('map')}
+          className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all
+            ${tab === 'map' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-500'}`}
+        >
+          🗺️ 지도
+        </button>
+      </div>
+
+      {tab === 'timeline'
+        ? <CourseTimeline course={currentCourse} />
+        : <CourseMapView course={currentCourse} />}
 
       {/* 코스 수정 액션 */}
       <CourseEditActions course={currentCourse} />
